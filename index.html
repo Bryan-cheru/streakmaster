@@ -604,8 +604,14 @@
                 if (digit < 4) {
                     // Streak resets
                     if (this.currentStreak > 0) {
-                        this.lastReset = this.currentStreak;
-                        this.log(`🔄 Streak reset from ${this.currentStreak} to 0 → Last Reset = ${this.lastReset}`, 'warning');
+                        // Store the streak value before reset
+                        const previousStreak = this.currentStreak;
+                        this.lastReset = previousStreak;
+                        this.log(`🔄 Streak reset from ${previousStreak} to 0 → Last Reset = ${this.lastReset}`, 'warning');
+                    } else if (this.currentStreak === 0 && this.lastReset !== 0) {
+                        // If streak is already 0 and lastReset has a value, reset lastReset to 0
+                        this.lastReset = 0;
+                        this.log(`✅ Last Reset cleared to 0 (new cycle started)`, 'success');
                     }
                     this.currentStreak = 0;
                     this.tradedOnCurrentStreak.clear();
