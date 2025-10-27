@@ -602,7 +602,7 @@
                 
                 // CORE LOGIC - Fast and Simple
                 if (digit < 4) {
-                    // Streak resets
+                    // Digit < 4: Reset streak
                     if (this.currentStreak > 0) {
                         // Store the streak value before reset
                         const previousStreak = this.currentStreak;
@@ -616,7 +616,12 @@
                     this.currentStreak = 0;
                     this.tradedOnCurrentStreak.clear();
                 } else {
-                    // digit >= 4, increment streak
+                    // Digit >= 4: Increment streak
+                    // If starting a new streak cycle (was at 0), clear Last Reset
+                    if (this.currentStreak === 0 && this.lastReset !== 0) {
+                        this.lastReset = 0;
+                        this.log(`✅ Last Reset cleared to 0 (new streak cycle starting)`, 'success');
+                    }
                     this.currentStreak++;
                     this.log(`📈 Digit ${digit} (≥4) → Streak = ${this.currentStreak}`, 'info');
                 }
