@@ -379,6 +379,25 @@
             </div>
         </div>
 
+        <!-- Trade Tracking Panel -->
+        <div class="status-panel">
+            <h3 style="color: #4ecdc4; margin-bottom: 10px;">Trade Tracking (1st & 2nd)</h3>
+            <div class="status-grid">
+                <div class="status-item">
+                    <h4>1st Trade (Streak 1)</h4>
+                    <div class="status-value" id="trade1Status" style="font-size: 1.2em;">Waiting</div>
+                </div>
+                <div class="status-item">
+                    <h4>2nd Trade (Streak 2)</h4>
+                    <div class="status-value" id="trade2Status" style="font-size: 1.2em;">Waiting</div>
+                </div>
+                <div class="status-item">
+                    <h4>Total Trades</h4>
+                    <div class="status-value" id="totalTradesCount">0</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Trading Indicator -->
         <div id="tradingIndicator" class="trading-indicator indicator-waiting">
             ⏳ Waiting for conditions: Last Reset = 0 AND Streak = 1 or 2
@@ -453,9 +472,15 @@
                 this.activeContracts = new Map();
                 this.tradedOnCurrentStreak = new Set();
                 
+                // Trade tracking for 1st & 2nd trades
+                this.trade1Status = 'Waiting'; // Waiting, Executed, Won, Lost
+                this.trade2Status = 'Waiting';
+                this.totalTradesCount = 0;
+                
                 this.updateDisplay();
                 this.log('🚀 StreakMaster Fast Execution Ready!', 'success');
                 this.log('📊 Trading Logic: Trade when Last Reset = 0 AND Streak = 1 or 2', 'info');
+                this.log('📊 1st Trade at Streak 1, 2nd Trade at Streak 2', 'info');
             }
 
             connect(apiToken) {
@@ -608,6 +633,10 @@
                         const previousStreak = this.currentStreak;
                         this.lastReset = previousStreak;
                         this.log(`🔄 Streak reset from ${previousStreak} to 0 → Last Reset = ${this.lastReset}`, 'warning');
+                        
+                        // Reset trade statuses for next cycle
+                        this.trade1Status = 'Waiting';
+                        this.trade2Status = 'Waiting';
                     } else if (this.currentStreak === 0 && this.lastReset !== 0) {
                         // If streak is already 0 and lastReset has a value, reset lastReset to 0
                         this.lastReset = 0;
@@ -661,10 +690,21 @@
                     this.activeTrades++;
                     this.activeContracts.set(result.contract_id, {
                         stake: result.buy_price,
-                        time: Date.now()
+                        time: Date.now(),
+                        tradeNumber: this.pendingTrade.tradeNumber // Store which trade this is (1 or 2)
                     });
                     
-                    this.log(`✅ Trade executed! Contract: ${result.contract_id}`, 'success');
+                    this.totalTradesCount++;
+                    
+                    // Update trade status
+                    if (this.pendingTrade.tradeNumber === 1) {
+                        this.trade1Status = '⏳ Pending';
+                        this.log(`✅ 1st Trade executed! Contract: ${result.contract_id}`, 'success');
+                    } else if (this.pendingTrade.tradeNumber === 2) {
+                        this.trade2Status = '⏳ Pending';
+                        this.log(`✅ 2nd Trade executed! Contract: ${result.contract_id}`, 'success');
+                    }
+                    
                     this.pendingTrade = null;
                     this.updateDisplay();
 
@@ -684,10 +724,26 @@
                     const pnl = contract.sell_price - contract.buy_price;
                     this.totalPnL += pnl;
                     
+                    // Get which trade number this was
+                    const contractInfo = this.activeContracts.get(contract.contract_id);
+                    const tradeNumber = contractInfo ? contractInfo.tradeNumber : null;
+                    
                     if (pnl > 0) {
                         this.log(`🎉 WIN: +$${pnl.toFixed(2)} (Contract: ${contract.contract_id})`, 'success');
+                        // Update trade status
+                        if (tradeNumber === 1) {
+                            this.trade1Status = '✅ Won';
+                        } else if (tradeNumber === 2) {
+                            this.trade2Status = '✅ Won';
+                        }
                     } else {
                         this.log(`❌ LOSS: -$${Math.abs(pnl).toFixed(2)} (Contract: ${contract.contract_id})`, 'error');
+                        // Update trade status
+                        if (tradeNumber === 1) {
+                            this.trade1Status = '❌ Lost';
+                        } else if (tradeNumber === 2) {
+                            this.trade2Status = '❌ Lost';
+                        }
                     }
                     
                     this.activeContracts.delete(contract.contract_id);
@@ -737,7 +793,10 @@
                     return;
                 }
 
-                this.pendingTrade = { stake };
+                // Determine which trade this is (1st or 2nd)
+                const tradeNumber = this.currentStreak; // 1 for first trade, 2 for second trade
+                
+                this.pendingTrade = { stake, tradeNumber };
 
                 // Send proposal request
                 this.send({
@@ -753,7 +812,7 @@
                     req_id: this.requestId++
                 });
 
-                this.log(`🎯 Trade requested: Stake $${stake} | Last Reset: ${this.lastReset} | Streak: ${this.currentStreak}`, 'info');
+                this.log(`🎯 ${tradeNumber === 1 ? '1st' : '2nd'} Trade requested: Stake $${stake} | Last Reset: ${this.lastReset} | Streak: ${this.currentStreak}`, 'info');
             }
 
             toggleAutoTrading() {
@@ -805,6 +864,11 @@
                 document.getElementById('lastReset').textContent = this.lastReset;
                 document.getElementById('balance').textContent = `$${this.balance.toFixed(2)}`;
                 document.getElementById('activeTrades').textContent = this.activeTrades;
+                
+                // Update trade tracking
+                document.getElementById('trade1Status').textContent = this.trade1Status;
+                document.getElementById('trade2Status').textContent = this.trade2Status;
+                document.getElementById('totalTradesCount').textContent = this.totalTradesCount;
                 
                 // Color-code P&L
                 const pnlElement = document.getElementById('totalPnL');
