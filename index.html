@@ -417,31 +417,28 @@
             
             <div class="controls-row">
                 <div class="control-item">
-                    <label>Base Stake ($)</label>
-                    <input type="number" id="baseStake" value="0.35" min="0.35" step="0.01">
+                    <label>📋 Select Stake Sequence</label>
+                    <select id="stakeSequenceSelect" onchange="updateStakeSequence()" style="width: 100%; padding: 10px; border: none; border-radius: 5px; background: rgba(255, 255, 255, 0.9); color: #333; font-size: 14px; font-weight: bold;">
+                        <option value="1">Sequence 1 (0.35, 0.68, 1.42...)</option>
+                        <option value="2">Sequence 2 (0.79, 1.42, 2.54...)</option>
+                    </select>
                 </div>
                 <div class="control-item">
-                    <label>Multiplier</label>
-                    <input type="number" id="stakeMultiplier" value="2" min="1" step="0.1">
+                    <label>💰 Next Stake</label>
+                    <input type="text" id="nextStake" value="$0.35" readonly style="background: rgba(76, 175, 80, 0.3); font-weight: bold; width: 100%; padding: 10px; border: none; border-radius: 5px; color: #fff; font-size: 16px; text-align: center;">
                 </div>
                 <div class="control-item">
-                    <label>Current Stake</label>
-                    <input type="text" id="currentStake" value="$0.35" readonly style="background: rgba(255,255,255,0.3);">
-                </div>
-            </div>
-
-            <div class="controls-row">
-                <div class="control-item">
-                    <label>Auto Trading</label>
+                    <label>🚀 Auto Trading</label>
                     <button class="btn btn-primary" id="autoTradingBtn" onclick="toggleAutoTrading()">Start Auto Trading</button>
                 </div>
             </div>
 
             <button class="emergency-stop" onclick="emergencyStop()">🛑 EMERGENCY STOP</button>
             
-            <div style="background: rgba(76, 175, 80, 0.2); padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 0.9em;">
-                <strong>📊 Stake Progression:</strong><br>
-                Trade 1: Base | Trade 2: Base × Multiplier | Trade 3: Base × Multiplier² | ...
+            <div style="background: rgba(76, 175, 80, 0.2); padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 0.85em;">
+                <strong>📊 Stake Sequences:</strong><br>
+                <strong>Sequence 1:</strong> 0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 38.86, 77.96, 155.56<br>
+                <strong>Sequence 2:</strong> 0.79, 1.42, 2.54, 4.55, 8.56, 15.54, 29.83, 57.62, 111.58, 215.81
             </div>
         </div>
 
@@ -468,6 +465,11 @@
                 // NEW: Progressive counter system (1st & 2nd)
                 this.progressiveCounter = 0;  // Tracks consecutive >2 resets
                 this.tradeNumber = 0;         // Tracks which trade in sequence (1, 2, 3, 4...)
+                
+                // Predefined stake sequences
+                this.stakeSequence1 = [0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 38.86, 77.96, 155.56];
+                this.stakeSequence2 = [0.79, 1.42, 2.54, 4.55, 8.56, 15.54, 29.83, 57.62, 111.58, 215.81];
+                this.selectedSequence = 1; // User selects which sequence to use
                 
                 // Account info
                 this.balance = 0;
@@ -778,34 +780,36 @@
                     return;
                 }
 
-                // Calculate progressive stake based on trade number
-                const baseStake = parseFloat(document.getElementById('baseStake').value);
-                const multiplier = parseFloat(document.getElementById('stakeMultiplier').value);
+                // Use the selected stake sequence
+                const sequence = (this.selectedSequence === 1) ? this.stakeSequence1 : this.stakeSequence2;
                 
-                // Progressive calculation: Base × Multiplier^(tradeNumber-1)
-                // Trade 1: base, Trade 2: base × multiplier, Trade 3: base × multiplier²
-                const stake = baseStake * Math.pow(multiplier, this.tradeNumber - 1);
-                const roundedStake = parseFloat(stake.toFixed(2));
+                // Calculate the index in the sequence based on trade number
+                // Trade 1 = index 0, Trade 2 = index 0, Trade 3 = index 1, Trade 4 = index 1, etc.
+                // Trade pairs: (1,2) use index 0, (3,4) use index 1, (5,6) use index 2, etc.
+                const sequenceIndex = Math.floor((this.tradeNumber - 1) / 2);
                 
-                if (isNaN(roundedStake) || roundedStake < 0.35) {
+                // Get stake from sequence (or use last if exceeded)
+                const stake = sequenceIndex < sequence.length ? sequence[sequenceIndex] : sequence[sequence.length - 1];
+                
+                if (isNaN(stake) || stake < 0.35) {
                     this.log('Invalid stake amount (minimum 0.35)', 'error');
                     return;
                 }
 
-                if (this.balance < roundedStake) {
-                    this.log(`Insufficient balance: $${this.balance.toFixed(2)} < $${roundedStake}`, 'error');
+                if (this.balance < stake) {
+                    this.log(`Insufficient balance: $${this.balance.toFixed(2)} < $${stake}`, 'error');
                     return;
                 }
 
-                // Update current stake display
-                document.getElementById('currentStake').value = `$${roundedStake}`;
+                // Update next stake display
+                document.getElementById('nextStake').value = `$${stake}`;
 
-                this.pendingTrade = { stake: roundedStake };
+                this.pendingTrade = { stake };
 
                 // Send proposal request
                 this.send({
                     proposal: 1,
-                    amount: roundedStake,
+                    amount: stake,
                     basis: 'stake',
                     contract_type: 'DIGITUNDER',
                     symbol: 'R_50',
@@ -816,7 +820,8 @@
                     req_id: this.requestId++
                 });
 
-                this.log(`🎯 TRADE #${this.tradeNumber} | Stake: $${roundedStake} (base: ${baseStake} × ${multiplier}^${this.tradeNumber-1}) | 1st&2nd: ${this.progressiveCounter}`, 'info');
+                const sequenceName = `Sequence ${this.selectedSequence}`;
+                this.log(`🎯 TRADE #${this.tradeNumber} | ${sequenceName}[${sequenceIndex}] = $${stake} | Streak: ${this.currentStreak} | 1st&2nd: ${this.progressiveCounter}`, 'info');
             }
 
             toggleAutoTrading() {
@@ -870,6 +875,14 @@
                 document.getElementById('tradeNumber').textContent = this.tradeNumber;
                 document.getElementById('balance').textContent = `$${this.balance.toFixed(2)}`;
                 document.getElementById('activeTrades').textContent = this.activeTrades;
+                
+                // Update next stake amounts
+                const nextIndex = Math.floor(this.tradeNumber / 2);
+                const nextStake1 = nextIndex < this.firstTradeSequence.length ? this.firstTradeSequence[nextIndex] : this.firstTradeSequence[this.firstTradeSequence.length - 1];
+                const nextStake2 = nextIndex < this.secondTradeSequence.length ? this.secondTradeSequence[nextIndex] : this.secondTradeSequence[this.secondTradeSequence.length - 1];
+                
+                document.getElementById('nextStakeStreak1').value = `$${nextStake1}`;
+                document.getElementById('nextStakeStreak2').value = `$${nextStake2}`;
                 
                 // Color-code P&L
                 const pnlElement = document.getElementById('totalPnL');
@@ -947,6 +960,18 @@
             if (confirm('Activate emergency stop? This will halt all trading immediately.')) {
                 bot.emergencyStop();
             }
+        }
+
+        function updateStakeSequence() {
+            const select = document.getElementById('stakeSequenceSelect');
+            bot.selectedSequence = parseInt(select.value);
+            bot.log(`📋 Stake sequence changed to Sequence ${bot.selectedSequence}`, 'info');
+            
+            // Update next stake display
+            const sequence = (bot.selectedSequence === 1) ? bot.stakeSequence1 : bot.stakeSequence2;
+            const sequenceIndex = Math.floor((bot.tradeNumber) / 2); // Next trade index
+            const nextStake = sequenceIndex < sequence.length ? sequence[sequenceIndex] : sequence[sequence.length - 1];
+            document.getElementById('nextStake').value = `$${nextStake}`;
         }
 
         // Keyboard shortcuts
