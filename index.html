@@ -417,9 +417,20 @@
             
             <div class="controls-row">
                 <div class="control-item">
-                    <label>Stake Amount ($)</label>
-                    <input type="number" id="stakeAmount" value="0.35" min="0.35" step="0.01">
+                    <label>Base Stake ($)</label>
+                    <input type="number" id="baseStake" value="0.35" min="0.35" step="0.01">
                 </div>
+                <div class="control-item">
+                    <label>Multiplier</label>
+                    <input type="number" id="stakeMultiplier" value="2" min="1" step="0.1">
+                </div>
+                <div class="control-item">
+                    <label>Current Stake</label>
+                    <input type="text" id="currentStake" value="$0.35" readonly style="background: rgba(255,255,255,0.3);">
+                </div>
+            </div>
+
+            <div class="controls-row">
                 <div class="control-item">
                     <label>Auto Trading</label>
                     <button class="btn btn-primary" id="autoTradingBtn" onclick="toggleAutoTrading()">Start Auto Trading</button>
@@ -427,6 +438,11 @@
             </div>
 
             <button class="emergency-stop" onclick="emergencyStop()">🛑 EMERGENCY STOP</button>
+            
+            <div style="background: rgba(76, 175, 80, 0.2); padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 0.9em;">
+                <strong>📊 Stake Progression:</strong><br>
+                Trade 1: Base | Trade 2: Base × Multiplier | Trade 3: Base × Multiplier² | ...
+            </div>
         </div>
 
         <!-- Trading Log -->
@@ -762,24 +778,34 @@
                     return;
                 }
 
-                const stake = parseFloat(document.getElementById('stakeAmount').value);
+                // Calculate progressive stake based on trade number
+                const baseStake = parseFloat(document.getElementById('baseStake').value);
+                const multiplier = parseFloat(document.getElementById('stakeMultiplier').value);
                 
-                if (isNaN(stake) || stake < 0.35) {
+                // Progressive calculation: Base × Multiplier^(tradeNumber-1)
+                // Trade 1: base, Trade 2: base × multiplier, Trade 3: base × multiplier²
+                const stake = baseStake * Math.pow(multiplier, this.tradeNumber - 1);
+                const roundedStake = parseFloat(stake.toFixed(2));
+                
+                if (isNaN(roundedStake) || roundedStake < 0.35) {
                     this.log('Invalid stake amount (minimum 0.35)', 'error');
                     return;
                 }
 
-                if (this.balance < stake) {
-                    this.log(`Insufficient balance: $${this.balance.toFixed(2)} < $${stake}`, 'error');
+                if (this.balance < roundedStake) {
+                    this.log(`Insufficient balance: $${this.balance.toFixed(2)} < $${roundedStake}`, 'error');
                     return;
                 }
 
-                this.pendingTrade = { stake };
+                // Update current stake display
+                document.getElementById('currentStake').value = `$${roundedStake}`;
+
+                this.pendingTrade = { stake: roundedStake };
 
                 // Send proposal request
                 this.send({
                     proposal: 1,
-                    amount: stake,
+                    amount: roundedStake,
                     basis: 'stake',
                     contract_type: 'DIGITUNDER',
                     symbol: 'R_50',
@@ -790,7 +816,7 @@
                     req_id: this.requestId++
                 });
 
-                this.log(`🎯 TRADE #${this.tradeNumber} requested | Stake: $${stake} | 1st&2nd: ${this.progressiveCounter} | Streak: ${this.currentStreak}`, 'info');
+                this.log(`🎯 TRADE #${this.tradeNumber} | Stake: $${roundedStake} (base: ${baseStake} × ${multiplier}^${this.tradeNumber-1}) | 1st&2nd: ${this.progressiveCounter}`, 'info');
             }
 
             toggleAutoTrading() {
