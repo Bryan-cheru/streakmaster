@@ -107,8 +107,8 @@
         /* Main Metrics Display */
         .metrics-panel {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
             margin-bottom: 30px;
         }
 
@@ -345,8 +345,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>⚡ StreakMaster - Fast Execution</h1>
-            <p>Trade when Last Reset = 0 AND Current Streak = 1 or 2</p>
+            <h1>⚡ StreakMaster - Progressive System</h1>
+            <p>Trade when 1st&2nd ≥ 2, Last Reset = 0, Streak = 1 or 2</p>
         </div>
 
         <!-- Connection Section -->
@@ -377,24 +377,13 @@
                 <h3>Last Reset</h3>
                 <div class="value" id="lastReset">0</div>
             </div>
-        </div>
-
-        <!-- Trade Tracking Panel -->
-        <div class="status-panel">
-            <h3 style="color: #4ecdc4; margin-bottom: 10px;">Trade Tracking (1st & 2nd)</h3>
-            <div class="status-grid">
-                <div class="status-item">
-                    <h4>1st Trade (Streak 1)</h4>
-                    <div class="status-value" id="trade1Status" style="font-size: 1.2em;">Waiting</div>
-                </div>
-                <div class="status-item">
-                    <h4>2nd Trade (Streak 2)</h4>
-                    <div class="status-value" id="trade2Status" style="font-size: 1.2em;">Waiting</div>
-                </div>
-                <div class="status-item">
-                    <h4>Total Trades</h4>
-                    <div class="status-value" id="totalTradesCount">0</div>
-                </div>
+            <div class="metric-card">
+                <h3>1st & 2nd</h3>
+                <div class="value" id="progressiveCounter">0</div>
+            </div>
+            <div class="metric-card">
+                <h3>Trade #</h3>
+                <div class="value" id="tradeNumber">0</div>
             </div>
         </div>
 
@@ -460,6 +449,10 @@
                 this.currentStreak = 0;
                 this.lastReset = 0;
                 
+                // NEW: Progressive counter system (1st & 2nd)
+                this.progressiveCounter = 0;  // Tracks consecutive >2 resets
+                this.tradeNumber = 0;         // Tracks which trade in sequence (1, 2, 3, 4...)
+                
                 // Account info
                 this.balance = 0;
                 this.sessionStartBalance = 0;
@@ -472,15 +465,10 @@
                 this.activeContracts = new Map();
                 this.tradedOnCurrentStreak = new Set();
                 
-                // Trade tracking for 1st & 2nd trades
-                this.trade1Status = 'Waiting'; // Waiting, Executed, Won, Lost
-                this.trade2Status = 'Waiting';
-                this.totalTradesCount = 0;
-                
                 this.updateDisplay();
                 this.log('🚀 StreakMaster Fast Execution Ready!', 'success');
-                this.log('📊 Trading Logic: Trade when Last Reset = 0 AND Streak = 1 or 2', 'info');
-                this.log('📊 1st Trade at Streak 1, 2nd Trade at Streak 2', 'info');
+                this.log('📊 NEW: Progressive Counter System (1st & 2nd)', 'info');
+                this.log('📊 Trading Logic: 1st&2nd >= 2, Last Reset = 0, Streak = 1 or 2', 'info');
             }
 
             connect(apiToken) {
@@ -625,18 +613,34 @@
                 this.lastDigit = digit;
                 document.getElementById('lastDigit').textContent = digit;
                 
-                // CORE LOGIC - Fast and Simple
+                // CORE LOGIC - Progressive Counter System
                 if (digit < 4) {
                     // Digit < 4: Reset streak
                     if (this.currentStreak > 0) {
                         // Store the streak value before reset
                         const previousStreak = this.currentStreak;
                         this.lastReset = previousStreak;
-                        this.log(`🔄 Streak reset from ${previousStreak} to 0 → Last Reset = ${this.lastReset}`, 'warning');
                         
-                        // Reset trade statuses for next cycle
-                        this.trade1Status = 'Waiting';
-                        this.trade2Status = 'Waiting';
+                        // Progressive counter logic
+                        if (previousStreak > 2) {
+                            // Streak was >2, increment progressive counter
+                            this.progressiveCounter++;
+                            this.log(`📈 1st & 2nd counter: ${this.progressiveCounter} (streak was ${previousStreak})`, 'warning');
+                        } else if (previousStreak <= 2 && previousStreak >= 1) {
+                            // Streak was 1 or 2 (potential win scenario)
+                            if (this.tradeNumber > 0) {
+                                // We were trading and streak ended at 1 or 2 = WIN!
+                                this.log(`🎉 WIN! Streak ended at ${previousStreak} → Resetting counters`, 'success');
+                                this.progressiveCounter = 0;
+                                this.tradeNumber = 0;
+                            } else {
+                                // Not trading, reset counter
+                                this.progressiveCounter = 0;
+                                this.log(`🔄 Counter reset (streak was ${previousStreak})`, 'info');
+                            }
+                        }
+                        
+                        this.log(`🔄 Streak reset from ${previousStreak} to 0 → Last Reset = ${this.lastReset}`, 'warning');
                     } else if (this.currentStreak === 0 && this.lastReset !== 0) {
                         // If streak is already 0 and lastReset has a value, reset lastReset to 0
                         this.lastReset = 0;
@@ -690,21 +694,10 @@
                     this.activeTrades++;
                     this.activeContracts.set(result.contract_id, {
                         stake: result.buy_price,
-                        time: Date.now(),
-                        tradeNumber: this.pendingTrade.tradeNumber // Store which trade this is (1 or 2)
+                        time: Date.now()
                     });
                     
-                    this.totalTradesCount++;
-                    
-                    // Update trade status
-                    if (this.pendingTrade.tradeNumber === 1) {
-                        this.trade1Status = '⏳ Pending';
-                        this.log(`✅ 1st Trade executed! Contract: ${result.contract_id}`, 'success');
-                    } else if (this.pendingTrade.tradeNumber === 2) {
-                        this.trade2Status = '⏳ Pending';
-                        this.log(`✅ 2nd Trade executed! Contract: ${result.contract_id}`, 'success');
-                    }
-                    
+                    this.log(`✅ Trade executed! Contract: ${result.contract_id}`, 'success');
                     this.pendingTrade = null;
                     this.updateDisplay();
 
@@ -724,26 +717,10 @@
                     const pnl = contract.sell_price - contract.buy_price;
                     this.totalPnL += pnl;
                     
-                    // Get which trade number this was
-                    const contractInfo = this.activeContracts.get(contract.contract_id);
-                    const tradeNumber = contractInfo ? contractInfo.tradeNumber : null;
-                    
                     if (pnl > 0) {
                         this.log(`🎉 WIN: +$${pnl.toFixed(2)} (Contract: ${contract.contract_id})`, 'success');
-                        // Update trade status
-                        if (tradeNumber === 1) {
-                            this.trade1Status = '✅ Won';
-                        } else if (tradeNumber === 2) {
-                            this.trade2Status = '✅ Won';
-                        }
                     } else {
                         this.log(`❌ LOSS: -$${Math.abs(pnl).toFixed(2)} (Contract: ${contract.contract_id})`, 'error');
-                        // Update trade status
-                        if (tradeNumber === 1) {
-                            this.trade1Status = '❌ Lost';
-                        } else if (tradeNumber === 2) {
-                            this.trade2Status = '❌ Lost';
-                        }
                     }
                     
                     this.activeContracts.delete(contract.contract_id);
@@ -752,8 +729,11 @@
             }
 
             checkTradingCondition() {
-                // Trading condition: Last Reset = 0 AND (Current Streak = 1 OR 2)
-                const canTrade = (this.lastReset === 0) && (this.currentStreak === 1 || this.currentStreak === 2);
+                // NEW Trading condition: Progressive counter must be >= 2
+                // PLUS: Last Reset = 0 AND Current Streak = 1 or 2
+                const counterReady = (this.progressiveCounter >= 2);
+                const streakReady = (this.lastReset === 0) && (this.currentStreak === 1 || this.currentStreak === 2);
+                const canTrade = counterReady && streakReady;
                 
                 if (!canTrade) {
                     return;
@@ -770,7 +750,8 @@
                     return;
                 }
 
-                // Execute trade immediately
+                // Execute trade immediately and increment trade number
+                this.tradeNumber++;
                 this.executeTrade();
                 this.tradedOnCurrentStreak.add(tradeKey);
             }
@@ -793,10 +774,7 @@
                     return;
                 }
 
-                // Determine which trade this is (1st or 2nd)
-                const tradeNumber = this.currentStreak; // 1 for first trade, 2 for second trade
-                
-                this.pendingTrade = { stake, tradeNumber };
+                this.pendingTrade = { stake };
 
                 // Send proposal request
                 this.send({
@@ -812,7 +790,7 @@
                     req_id: this.requestId++
                 });
 
-                this.log(`🎯 ${tradeNumber === 1 ? '1st' : '2nd'} Trade requested: Stake $${stake} | Last Reset: ${this.lastReset} | Streak: ${this.currentStreak}`, 'info');
+                this.log(`🎯 TRADE #${this.tradeNumber} requested | Stake: $${stake} | 1st&2nd: ${this.progressiveCounter} | Streak: ${this.currentStreak}`, 'info');
             }
 
             toggleAutoTrading() {
@@ -862,13 +840,10 @@
             updateDisplay() {
                 document.getElementById('currentStreak').textContent = this.currentStreak;
                 document.getElementById('lastReset').textContent = this.lastReset;
+                document.getElementById('progressiveCounter').textContent = this.progressiveCounter;
+                document.getElementById('tradeNumber').textContent = this.tradeNumber;
                 document.getElementById('balance').textContent = `$${this.balance.toFixed(2)}`;
                 document.getElementById('activeTrades').textContent = this.activeTrades;
-                
-                // Update trade tracking
-                document.getElementById('trade1Status').textContent = this.trade1Status;
-                document.getElementById('trade2Status').textContent = this.trade2Status;
-                document.getElementById('totalTradesCount').textContent = this.totalTradesCount;
                 
                 // Color-code P&L
                 const pnlElement = document.getElementById('totalPnL');
@@ -884,20 +859,25 @@
 
             updateTradingIndicator() {
                 const indicator = document.getElementById('tradingIndicator');
-                const canTrade = (this.lastReset === 0) && (this.currentStreak === 1 || this.currentStreak === 2);
+                const counterReady = (this.progressiveCounter >= 2);
+                const streakReady = (this.lastReset === 0) && (this.currentStreak === 1 || this.currentStreak === 2);
+                const canTrade = counterReady && streakReady;
                 
                 if (canTrade) {
                     indicator.className = 'trading-indicator indicator-ready';
-                    indicator.textContent = `✅ READY TO TRADE! (Last Reset: ${this.lastReset}, Streak: ${this.currentStreak})`;
+                    indicator.textContent = `✅ READY! 1st&2nd: ${this.progressiveCounter}, Last Reset: ${this.lastReset}, Streak: ${this.currentStreak} → Trade #${this.tradeNumber + 1}`;
+                } else if (!counterReady) {
+                    indicator.className = 'trading-indicator indicator-waiting';
+                    indicator.textContent = `⏳ Building counter: 1st&2nd = ${this.progressiveCounter} (need 2+)`;
                 } else if (this.currentStreak > 2) {
                     indicator.className = 'trading-indicator indicator-blocked';
-                    indicator.textContent = `🚫 Streak > 2 (${this.currentStreak}) - Waiting for reset`;
+                    indicator.textContent = `🚫 Streak > 2 (${this.currentStreak}) - Waiting for reset to 0`;
                 } else if (this.lastReset !== 0) {
                     indicator.className = 'trading-indicator indicator-blocked';
-                    indicator.textContent = `🚫 Last Reset ≠ 0 (${this.lastReset}) - Waiting for reset`;
+                    indicator.textContent = `🚫 Last Reset ≠ 0 (${this.lastReset}) - Waiting`;
                 } else {
                     indicator.className = 'trading-indicator indicator-waiting';
-                    indicator.textContent = `⏳ Waiting: Last Reset = ${this.lastReset}, Streak = ${this.currentStreak}`;
+                    indicator.textContent = `⏳ Waiting: 1st&2nd=${this.progressiveCounter}, Reset=${this.lastReset}, Streak=${this.currentStreak}`;
                 }
             }
 
