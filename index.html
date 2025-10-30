@@ -417,28 +417,32 @@
             
             <div class="controls-row">
                 <div class="control-item">
-                    <label>📋 Select Stake Sequence</label>
-                    <select id="stakeSequenceSelect" onchange="updateStakeSequence()" style="width: 100%; padding: 10px; border: none; border-radius: 5px; background: rgba(255, 255, 255, 0.9); color: #333; font-size: 14px; font-weight: bold;">
-                        <option value="1">Sequence 1 (0.35, 0.68, 1.42...)</option>
-                        <option value="2">Sequence 2 (0.79, 1.42, 2.54...)</option>
+                    <label>Stake Sequence</label>
+                    <select id="stakeSequence" onchange="updateStakeDisplay()" style="padding: 10px; border-radius: 5px; border: none; background: rgba(255,255,255,0.9); color: #333; font-size: 14px; width: 100%;">
+                        <option value="1">Sequence 1: 0.35, 0.68, 1.42, 2.74, 5.30, 9.70...</option>
+                        <option value="2">Sequence 2: 0.79, 1.42, 2.54, 4.55, 8.56, 15.54...</option>
                     </select>
                 </div>
                 <div class="control-item">
-                    <label>💰 Next Stake</label>
-                    <input type="text" id="nextStake" value="$0.35" readonly style="background: rgba(76, 175, 80, 0.3); font-weight: bold; width: 100%; padding: 10px; border: none; border-radius: 5px; color: #fff; font-size: 16px; text-align: center;">
+                    <label>Current Stake</label>
+                    <input type="text" id="currentStake" value="$0.35" readonly style="background: rgba(255,255,255,0.3);">
                 </div>
+            </div>
+
+            <div class="controls-row">
                 <div class="control-item">
-                    <label>🚀 Auto Trading</label>
+                    <label>Auto Trading</label>
                     <button class="btn btn-primary" id="autoTradingBtn" onclick="toggleAutoTrading()">Start Auto Trading</button>
                 </div>
             </div>
 
             <button class="emergency-stop" onclick="emergencyStop()">🛑 EMERGENCY STOP</button>
             
-            <div style="background: rgba(76, 175, 80, 0.2); padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 0.85em;">
-                <strong>📊 Stake Sequences:</strong><br>
-                <strong>Sequence 1:</strong> 0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 38.86, 77.96, 155.56<br>
-                <strong>Sequence 2:</strong> 0.79, 1.42, 2.54, 4.55, 8.56, 15.54, 29.83, 57.62, 111.58, 215.81
+            <div style="background: rgba(76, 175, 80, 0.2); padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 0.9em;">
+                <strong>📊 Selected Sequence Stakes:</strong>
+                <div id="sequenceDisplay" style="margin-top: 8px; font-family: monospace;">
+                    Trade 1: $0.35 | Trade 2: $0.68 | Trade 3: $1.42 | Trade 4: $2.74 | Trade 5: $5.30
+                </div>
             </div>
         </div>
 
@@ -467,9 +471,10 @@
                 this.tradeNumber = 0;         // Tracks which trade in sequence (1, 2, 3, 4...)
                 
                 // Predefined stake sequences
-                this.stakeSequence1 = [0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 38.86, 77.96, 155.56];
-                this.stakeSequence2 = [0.79, 1.42, 2.54, 4.55, 8.56, 15.54, 29.83, 57.62, 111.58, 215.81];
-                this.selectedSequence = 1; // User selects which sequence to use
+                this.stakeSequences = {
+                    1: [0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 38.86, 77.96, 155.56],
+                    2: [0.79, 1.42, 2.54, 4.55, 8.56, 15.54, 29.83, 57.62, 111.58, 215.81]
+                };
                 
                 // Account info
                 this.balance = 0;
@@ -780,36 +785,45 @@
                     return;
                 }
 
-                // Use the selected stake sequence
-                const sequence = (this.selectedSequence === 1) ? this.stakeSequence1 : this.stakeSequence2;
+                // Get selected sequence
+                const sequenceId = parseInt(document.getElementById('stakeSequence').value);
+                const sequence = this.stakeSequences[sequenceId];
                 
-                // Calculate the index in the sequence based on trade number
-                // Trade 1 = index 0, Trade 2 = index 0, Trade 3 = index 1, Trade 4 = index 1, etc.
-                // Trade pairs: (1,2) use index 0, (3,4) use index 1, (5,6) use index 2, etc.
-                const sequenceIndex = Math.floor((this.tradeNumber - 1) / 2);
+                // Get stake from sequence (tradeNumber is 1-indexed)
+                const stakeIndex = this.tradeNumber - 1;
+                let stake;
                 
-                // Get stake from sequence (or use last if exceeded)
-                const stake = sequenceIndex < sequence.length ? sequence[sequenceIndex] : sequence[sequence.length - 1];
+                if (stakeIndex < sequence.length) {
+                    stake = sequence[stakeIndex];
+                } else {
+                    // If beyond sequence length, continue pattern
+                    // Use last value × 2 for each additional trade
+                    const lastValue = sequence[sequence.length - 1];
+                    const extraSteps = stakeIndex - sequence.length + 1;
+                    stake = lastValue * Math.pow(2, extraSteps);
+                }
                 
-                if (isNaN(stake) || stake < 0.35) {
+                const roundedStake = parseFloat(stake.toFixed(2));
+                
+                if (isNaN(roundedStake) || roundedStake < 0.35) {
                     this.log('Invalid stake amount (minimum 0.35)', 'error');
                     return;
                 }
 
-                if (this.balance < stake) {
-                    this.log(`Insufficient balance: $${this.balance.toFixed(2)} < $${stake}`, 'error');
+                if (this.balance < roundedStake) {
+                    this.log(`Insufficient balance: $${this.balance.toFixed(2)} < $${roundedStake}`, 'error');
                     return;
                 }
 
-                // Update next stake display
-                document.getElementById('nextStake').value = `$${stake}`;
+                // Update current stake display
+                document.getElementById('currentStake').value = `$${roundedStake}`;
 
-                this.pendingTrade = { stake };
+                this.pendingTrade = { stake: roundedStake };
 
                 // Send proposal request
                 this.send({
                     proposal: 1,
-                    amount: stake,
+                    amount: roundedStake,
                     basis: 'stake',
                     contract_type: 'DIGITUNDER',
                     symbol: 'R_50',
@@ -820,8 +834,7 @@
                     req_id: this.requestId++
                 });
 
-                const sequenceName = `Sequence ${this.selectedSequence}`;
-                this.log(`🎯 TRADE #${this.tradeNumber} | ${sequenceName}[${sequenceIndex}] = $${stake} | Streak: ${this.currentStreak} | 1st&2nd: ${this.progressiveCounter}`, 'info');
+                this.log(`🎯 TRADE #${this.tradeNumber} | Stake: $${roundedStake} (Sequence ${sequenceId}) | 1st&2nd: ${this.progressiveCounter}`, 'info');
             }
 
             toggleAutoTrading() {
@@ -875,14 +888,6 @@
                 document.getElementById('tradeNumber').textContent = this.tradeNumber;
                 document.getElementById('balance').textContent = `$${this.balance.toFixed(2)}`;
                 document.getElementById('activeTrades').textContent = this.activeTrades;
-                
-                // Update next stake amounts
-                const nextIndex = Math.floor(this.tradeNumber / 2);
-                const nextStake1 = nextIndex < this.firstTradeSequence.length ? this.firstTradeSequence[nextIndex] : this.firstTradeSequence[this.firstTradeSequence.length - 1];
-                const nextStake2 = nextIndex < this.secondTradeSequence.length ? this.secondTradeSequence[nextIndex] : this.secondTradeSequence[this.secondTradeSequence.length - 1];
-                
-                document.getElementById('nextStakeStreak1').value = `$${nextStake1}`;
-                document.getElementById('nextStakeStreak2').value = `$${nextStake2}`;
                 
                 // Color-code P&L
                 const pnlElement = document.getElementById('totalPnL');
@@ -962,16 +967,25 @@
             }
         }
 
-        function updateStakeSequence() {
-            const select = document.getElementById('stakeSequenceSelect');
-            bot.selectedSequence = parseInt(select.value);
-            bot.log(`📋 Stake sequence changed to Sequence ${bot.selectedSequence}`, 'info');
+        function updateStakeDisplay() {
+            const sequenceId = parseInt(document.getElementById('stakeSequence').value);
+            const sequence = bot.stakeSequences[sequenceId];
+            const display = document.getElementById('sequenceDisplay');
             
-            // Update next stake display
-            const sequence = (bot.selectedSequence === 1) ? bot.stakeSequence1 : bot.stakeSequence2;
-            const sequenceIndex = Math.floor((bot.tradeNumber) / 2); // Next trade index
-            const nextStake = sequenceIndex < sequence.length ? sequence[sequenceIndex] : sequence[sequence.length - 1];
-            document.getElementById('nextStake').value = `$${nextStake}`;
+            let html = '';
+            for (let i = 0; i < Math.min(5, sequence.length); i++) {
+                html += `Trade ${i + 1}: $${sequence[i]}`;
+                if (i < Math.min(4, sequence.length - 1)) html += ' | ';
+            }
+            
+            display.innerHTML = html;
+            
+            // Update current stake if we have a trade number
+            if (bot.tradeNumber > 0) {
+                const stakeIndex = bot.tradeNumber - 1;
+                const stake = stakeIndex < sequence.length ? sequence[stakeIndex] : sequence[sequence.length - 1] * Math.pow(2, stakeIndex - sequence.length + 1);
+                document.getElementById('currentStake').value = `$${stake.toFixed(2)}`;
+            }
         }
 
         // Keyboard shortcuts
