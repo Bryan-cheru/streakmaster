@@ -419,13 +419,20 @@
                 <div class="control-item">
                     <label>Stake Sequence</label>
                     <select id="stakeSequence" onchange="updateStakeDisplay()" style="padding: 10px; border-radius: 5px; border: none; background: rgba(255,255,255,0.9); color: #333; font-size: 14px; width: 100%;">
-                        <option value="1">Sequence 1: 0.35, 0.68, 1.42, 2.74, 5.30, 9.70...</option>
-                        <option value="2">Sequence 2: 0.79, 1.42, 2.54, 4.55, 8.56, 15.54...</option>
+                        <option value="1">Sequence 1 (Custom)</option>
+                        <option value="2">Sequence 2 (Custom)</option>
                     </select>
                 </div>
                 <div class="control-item">
                     <label>Current Stake</label>
                     <input type="text" id="currentStake" value="$0.35" readonly style="background: rgba(255,255,255,0.3);">
+                </div>
+                <div class="control-item">
+                    <label style="display: flex; align-items: center; gap: 5px;">
+                        <button class="btn btn-primary" onclick="openSequenceEditor()" style="padding: 10px 15px; font-size: 13px;">
+                            ✏️ Edit Sequences
+                        </button>
+                    </label>
                 </div>
             </div>
 
@@ -440,8 +447,39 @@
             
             <div style="background: rgba(76, 175, 80, 0.2); padding: 12px; border-radius: 8px; margin-top: 15px; font-size: 0.9em;">
                 <strong>📊 Selected Sequence Stakes:</strong>
-                <div id="sequenceDisplay" style="margin-top: 8px; font-family: monospace;">
+                <div id="sequenceDisplay" style="margin-top: 8px; font-family: monospace; font-size: 0.85em;">
                     Trade 1: $0.35 | Trade 2: $0.68 | Trade 3: $1.42 | Trade 4: $2.74 | Trade 5: $5.30
+                </div>
+            </div>
+        </div>
+
+        <!-- Sequence Editor Modal -->
+        <div id="sequenceEditorModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto;">
+            <div style="max-width: 700px; margin: 50px auto; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 15px; padding: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+                <h2 style="color: #4ecdc4; margin-bottom: 20px;">✏️ Edit Stake Sequences</h2>
+                
+                <div style="margin-bottom: 25px;">
+                    <h3 style="color: #fff; margin-bottom: 10px;">Sequence 1:</h3>
+                    <textarea id="sequence1Input" rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: none; font-family: monospace; font-size: 14px; resize: vertical;" placeholder="Enter comma-separated values: 0.35, 0.68, 1.42, ..."></textarea>
+                    <div style="font-size: 0.85em; color: #ccc; margin-top: 5px;">Enter stakes separated by commas (e.g., 0.35, 0.68, 1.42, 2.74, 5.30)</div>
+                </div>
+                
+                <div style="margin-bottom: 25px;">
+                    <h3 style="color: #fff; margin-bottom: 10px;">Sequence 2:</h3>
+                    <textarea id="sequence2Input" rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: none; font-family: monospace; font-size: 14px; resize: vertical;" placeholder="Enter comma-separated values: 0.79, 1.42, 2.54, ..."></textarea>
+                    <div style="font-size: 0.85em; color: #ccc; margin-top: 5px;">Enter stakes separated by commas (e.g., 0.79, 1.42, 2.54, 4.55, 8.56)</div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="saveSequences()" style="flex: 1;">💾 Save Sequences</button>
+                    <button class="btn btn-danger" onclick="closeSequenceEditor()" style="flex: 1;">❌ Cancel</button>
+                </div>
+                
+                <div style="background: rgba(255, 152, 0, 0.2); padding: 12px; border-radius: 8px; margin-top: 20px; font-size: 0.85em;">
+                    <strong>💡 Tips:</strong><br>
+                    • Use commas to separate stake values<br>
+                    • Values are saved automatically in your browser<br>
+                    • You can update these anytime without losing your data
                 </div>
             </div>
         </div>
@@ -470,11 +508,14 @@
                 this.progressiveCounter = 0;  // Tracks consecutive >2 resets
                 this.tradeNumber = 0;         // Tracks which trade in sequence (1, 2, 3, 4...)
                 
-                // Predefined stake sequences
+                // Default stake sequences (can be customized by user)
                 this.stakeSequences = {
-                    1: [0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 38.86, 77.96, 155.56],
+                    1: [0.35, 0.68, 1.42, 2.74, 5.30, 9.70, 19.36, 35.29, 63.25, 113.35, 207.12, 371.19, 673.14, 1210.33],
                     2: [0.79, 1.42, 2.54, 4.55, 8.56, 15.54, 29.83, 57.62, 111.58, 215.81]
                 };
+                
+                // Load custom sequences from localStorage if available
+                this.loadCustomSequences();
                 
                 // Account info
                 this.balance = 0;
@@ -938,6 +979,34 @@
                     logDiv.removeChild(logDiv.firstChild);
                 }
             }
+
+            loadCustomSequences() {
+                try {
+                    const saved1 = localStorage.getItem('stakeSequence1');
+                    const saved2 = localStorage.getItem('stakeSequence2');
+                    
+                    if (saved1) {
+                        this.stakeSequences[1] = JSON.parse(saved1);
+                        this.log('Loaded custom Sequence 1 from storage', 'info');
+                    }
+                    if (saved2) {
+                        this.stakeSequences[2] = JSON.parse(saved2);
+                        this.log('Loaded custom Sequence 2 from storage', 'info');
+                    }
+                } catch (error) {
+                    this.log('Error loading custom sequences: ' + error, 'warning');
+                }
+            }
+
+            saveCustomSequences() {
+                try {
+                    localStorage.setItem('stakeSequence1', JSON.stringify(this.stakeSequences[1]));
+                    localStorage.setItem('stakeSequence2', JSON.stringify(this.stakeSequences[2]));
+                    this.log('✅ Custom sequences saved successfully', 'success');
+                } catch (error) {
+                    this.log('Error saving sequences: ' + error, 'error');
+                }
+            }
         }
 
         // Global bot instance
@@ -985,6 +1054,60 @@
                 const stakeIndex = bot.tradeNumber - 1;
                 const stake = stakeIndex < sequence.length ? sequence[stakeIndex] : sequence[sequence.length - 1] * Math.pow(2, stakeIndex - sequence.length + 1);
                 document.getElementById('currentStake').value = `$${stake.toFixed(2)}`;
+            }
+        }
+
+        function openSequenceEditor() {
+            // Populate current values
+            document.getElementById('sequence1Input').value = bot.stakeSequences[1].join(', ');
+            document.getElementById('sequence2Input').value = bot.stakeSequences[2].join(', ');
+            
+            // Show modal
+            document.getElementById('sequenceEditorModal').style.display = 'block';
+        }
+
+        function closeSequenceEditor() {
+            document.getElementById('sequenceEditorModal').style.display = 'none';
+        }
+
+        function saveSequences() {
+            try {
+                // Parse Sequence 1
+                const seq1Text = document.getElementById('sequence1Input').value;
+                const seq1Array = seq1Text.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v) && v > 0);
+                
+                // Parse Sequence 2
+                const seq2Text = document.getElementById('sequence2Input').value;
+                const seq2Array = seq2Text.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v) && v > 0);
+                
+                // Validate
+                if (seq1Array.length === 0 && seq2Array.length === 0) {
+                    alert('Please enter at least one valid sequence');
+                    return;
+                }
+                
+                // Update bot sequences
+                if (seq1Array.length > 0) {
+                    bot.stakeSequences[1] = seq1Array;
+                    bot.log(`Sequence 1 updated: ${seq1Array.length} stakes`, 'success');
+                }
+                if (seq2Array.length > 0) {
+                    bot.stakeSequences[2] = seq2Array;
+                    bot.log(`Sequence 2 updated: ${seq2Array.length} stakes`, 'success');
+                }
+                
+                // Save to localStorage
+                bot.saveCustomSequences();
+                
+                // Update display
+                updateStakeDisplay();
+                
+                // Close modal
+                closeSequenceEditor();
+                
+                alert('✅ Sequences saved successfully!');
+            } catch (error) {
+                alert('Error saving sequences: ' + error.message);
             }
         }
 
