@@ -834,15 +834,9 @@
                 const stakeIndex = this.tradeNumber - 1;
                 let stake;
                 
-                if (stakeIndex < sequence.length) {
-                    stake = sequence[stakeIndex];
-                } else {
-                    // If beyond sequence length, continue pattern
-                    // Use last value × 2 for each additional trade
-                    const lastValue = sequence[sequence.length - 1];
-                    const extraSteps = stakeIndex - sequence.length + 1;
-                    stake = lastValue * Math.pow(2, extraSteps);
-                }
+                // If beyond sequence length, RESET to first stake (cycle through sequence)
+                const actualIndex = stakeIndex % sequence.length;
+                stake = sequence[actualIndex];
                 
                 const roundedStake = parseFloat(stake.toFixed(2));
                 
